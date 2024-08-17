@@ -3,10 +3,10 @@
 #include <EEPROM.h>
 #include "eeprom/eeprom_mem_helper.h"
 
-esp_pkt_hdl pkt_hdl;
+//esp_pkt_hdl pkt_hdl;
 
 void setup() {
-  Serial.begin(256000);
+  Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
   EEPROM.begin(1024);
 
@@ -46,6 +46,7 @@ void loop() {
   }
   return;
 stage_0:
+    digitalWrite(2, HIGH);
     buf_sz = Serial.available();
     Serial.read(buf, Serial.available());
     memcpy(&cts, buf, CTS_PKT_SZ);
@@ -69,7 +70,7 @@ stage_2:
     return;
 stage_3:
     Serial.read(buf, Serial.available());
-    pkt_hdl.handle(buf, buf_sz);
+    //spkt_hdl.handle(buf, buf_sz);
     stage++;
     goto end_stage_3;
     return;

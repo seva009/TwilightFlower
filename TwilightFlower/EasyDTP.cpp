@@ -4,15 +4,20 @@
 #include "io.h"
 #include "crc32.h"
 #include <cstdio>
+#include "iopool.h"
 
 #define pksf(x) (x >= 10)?2:1
+IOPool_esp iopool("\\\\.\\COM6");
 
 bool EasyDTP::SendPacket(void* pkt, size_t pkt_sz) {
-	return WriteComPort(COM_port, CString((char*)pkt, pkt_sz), pkt_sz);
+	iopool.send_pkt(pkt, pkt_sz);
+	return true;
 }
 
 bool EasyDTP::RecvPacket(void* pkt, size_t pkt_sz) {
-	return ReadComPort(COM_port, pkt, pkt_sz);
+	void* tmp_pkt = iopool.recv_pkt(&pkt_sz);
+	memcpy(pkt, tmp_pkt, pkt_sz);
+	return true;
 }
 
 EasyDTP::EasyDTP(int port) {

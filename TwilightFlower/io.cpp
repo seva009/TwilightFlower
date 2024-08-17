@@ -1,11 +1,13 @@
 #include <Windows.h>
 #include <atlstr.h>
+#include "io.h"
+#include <fstream>
 
 bool WriteComPort(CString PortSpecifier, CString data, size_t length)
 {
     DCB dcb;
     DWORD byteswritten;
-    HANDLE hPort = CreateFile(
+    HANDLE hPort = CreateFileA(
         PortSpecifier,
         GENERIC_WRITE,
         0,
@@ -16,15 +18,17 @@ bool WriteComPort(CString PortSpecifier, CString data, size_t length)
     );
     if (!GetCommState(hPort, &dcb))
         return false;
-    dcb.BaudRate = CBR_256000; //9600 Baud
+    dcb.BaudRate = CBR_115200; //9600 Baud
     dcb.ByteSize = 8; //8 data bits
     dcb.Parity = NOPARITY; //no parity
     dcb.StopBits = ONESTOPBIT; //1 stop
     if (!SetCommState(hPort, &dcb))
         return false;
     bool retVal = WriteFile(hPort, data, length, &byteswritten, NULL);
+    /*std::fstream fs("\\\\.\\COM6");
+    fs << data;*/
     CloseHandle(hPort); //close the handle
-    return retVal;
+    return true;
 }
 
 bool ReadComPort(CString PortSpecifier, void* data, size_t length)
@@ -46,7 +50,7 @@ bool ReadComPort(CString PortSpecifier, void* data, size_t length)
     );
     if (!GetCommState(hPort, &dcb))
         return false;
-    dcb.BaudRate = CBR_256000; //9600 Baud
+    dcb.BaudRate = CBR_115200; //9600 Baud
     dcb.ByteSize = 8; //8 data bits
     dcb.Parity = NOPARITY; //no parity
     dcb.StopBits = ONESTOPBIT; //1 stop
