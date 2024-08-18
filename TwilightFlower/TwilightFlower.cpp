@@ -22,7 +22,7 @@ int main()
 	//	printf("%c", q);
 	//}
 
-	packets::hello* pkt = (packets::hello*)malloc(HELLO_PKT_SZ);
+	/*packets::hello* pkt = (packets::hello*)malloc(HELLO_PKT_SZ);
 	pkt->sig = TRS_SIG;
 	pkt->proto_ver = PROTO_VER;
 	pkt->type = (uint16_t)pkt_types::HELLO;
@@ -110,7 +110,7 @@ int main()
 	printf(" sig: %hxx\n protocol version:%u\n type: %u\n cts timeout: %u\n end sig: %hxx\n", ut4->start_sig, ut4->proto_ver, ut4->type, ut4->cts_timeout, ut4->end_sig);
 
 	uint8_t* test_buf = (uint8_t*)calloc(256, 1);
-	uint8_t* test_buf2 = (uint8_t*)calloc(256, 1);
+	uint8_t* test_buf2 = (uint8_t*)calloc(256, 1);*/
 	//for (int i = 0; i < 256; i++) {
 	//	test_buf[i] = 0x19;
 	//}
@@ -126,7 +126,7 @@ int main()
 	}*/
 
 	//for (int i = 0; i < 256; i++) printf("0x%hx,", ((uint8_t*)test_buf2)[i]);
-
+	uint8_t key[32];
 	EasyDTP dtp(6);
 	dtp.TransferKey(key);
 

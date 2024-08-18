@@ -3,10 +3,11 @@
 #include "iopool.h"
 #include "io.h"
 #include <stdio.h>
+#include <stdexcept>
 
 #pragma warning(disable : 26495)
 IOPool_esp::IOPool_esp(CString port) {
-    //std::thread t(&IOPool_esp::inf_read_bytes, this);
+    
     hPort = CreateFile(
         port,
         GENERIC_WRITE | GENERIC_READ,
@@ -27,11 +28,15 @@ IOPool_esp::IOPool_esp(CString port) {
     if (!SetCommState(hPort, &dcbSerialParams))
         return;
     memset(tmp_buf, 0, tmp_buf_sz);
+    opool = calloc(1,1);
+	ipool = calloc(1,1);
     locked_i = false;
 	locked_o = false;
     ipool_sz = 0;
 	opool_sz = 0;
     tmp_buf_sz = 0;
+    read_t = std::thread(&IOPool_esp::inf_read_bytes, this);
+    read_t.detach();
 	return;
 }
 
@@ -55,13 +60,29 @@ void IOPool_esp::unlock_o() {
 	locked_o = false;
 }
 
-void IOPool_esp::merge_buf(void** buf, void* tmp_buf, size_t* buf_sz, size_t tmp_buf_sz) {
-    *buf = realloc(*buf, *buf_sz + tmp_buf_sz);
-	memcpy((uint8_t*)(*buf) + *buf_sz, tmp_buf, tmp_buf_sz);
-	*buf_sz += tmp_buf_sz;
+void IOPool_esp::merge_buf(void** buf, void* adn_buf, size_t* buf_sz, size_t adn_buf_sz) {
+    // Проверяем, что переданные параметры валидны
+    if (!buf || !*buf || !adn_buf || !buf_sz) return;
+
+    // Выделяем новую память для объединенного буфера
+    void* new_buf = realloc(*buf, *buf_sz + adn_buf_sz);
+    if (!new_buf) {
+        // Ошибка выделения памяти, возвращаем ничего
+        return;
+    }
+
+    // Копируем содержимое дополнительного буфера в новое место
+    memcpy((uint8_t*)new_buf + *buf_sz, adn_buf, adn_buf_sz);
+
+    // Обновляем размер буфера
+    *buf_sz += adn_buf_sz;  // Исправлено: использована правильная переменная
+
+    // Обновляем указатель на буфер
+    *buf = new_buf;
 }
 
 void IOPool_esp::write_ipool() {
+    lock_o();
     if (locked_i)
     {
         while (locked_i)
@@ -69,7 +90,7 @@ void IOPool_esp::write_ipool() {
             Sleep(1);
         }
     }
-    lock_o();
+    
     //merge_buf(&ipool, tmp_buf, &ipool_sz, tmp_buf_sz);
     if (!WriteFile(hPort, ipool, ipool_sz, NULL, NULL)) printf("Can't write\n");
 	ipool_sz = 0;
@@ -81,18 +102,25 @@ void IOPool_esp::write_ipool() {
 void IOPool_esp::read_byte() {
 	if (locked_o)
 	{
+        printf("locked_o\n");
 		while (locked_o)
 		{
 			Sleep(1);
 		}
 	}
 	lock_i();
-    if (tmp_buf_sz - 1 == sizeof(tmp_buf)) {
+    opool = realloc(opool, opool_sz + 1);
+	ReadFile(hPort, (uint8_t*)opool + opool_sz, 1, NULL, NULL);
+	opool_sz += 1;
+    /*if (tmp_buf_sz - 1 == sizeof(tmp_buf) || last_byte_read - time(NULL) >= 1) {
+        printf("tmp_buf_sz %d\n", tmp_buf_sz);
         merge_buf(&opool, tmp_buf, &opool_sz, sizeof(tmp_buf));
-		tmp_buf_sz = 0;
-    }
-	ReadFile(hPort, tmp_buf + tmp_buf_sz, 1, NULL, NULL);
-	unlock_i();
+        opool_sz += tmp_buf_sz;
+        tmp_buf_sz = 0;
+    }*/
+    last_byte_read = time(NULL);
+	unlock_i();  
+    //printf("read_byte end\n");
 	return;
 }
 
@@ -103,24 +131,66 @@ void IOPool_esp::inf_read_bytes() {
 }
 
 void IOPool_esp::send_pkt(void* pkt, size_t pkt_sz) {
-    merge_buf(&ipool, pkt, &ipool_sz, pkt_sz);
-    printf("%d\n", ipool_sz);
-	write_ipool();
+    lock_o();
+    WriteFile(hPort, pkt, pkt_sz, NULL, NULL);
+    unlock_o();
 }
 
-void* IOPool_esp::recv_pkt(size_t* ret_sz) {
-	std::vector<std::vector<size_t>> pool = thread_pkt_split(opool, opool_sz, TRS_SIG);
-	while (pool.size() == 0) {
-        read_byte();
-		pool = thread_pkt_split(opool, opool_sz, TRS_SIG);
-	}
-    *ret_sz = pool[0][1] - pool[0][0];
-    void* ret = calloc(*ret_sz, 1);
-    memcpy(ret, (uint8_t*)opool + pool[0][0], *ret_sz);
-	void* new_opool = calloc(opool_sz - *ret_sz, 1);
-	memcpy(new_opool, (uint8_t*)opool + pool[0][1], opool_sz - *ret_sz);
-	free(opool);
-	opool = new_opool;
-	opool_sz -= *ret_sz;
-	return ret;
+//well i dont want to fix it
+//void* IOPool_esp::recv_pkt(size_t* ret_sz) {
+//	if (ret_sz == nullptr || opool == nullptr) {
+//		throw std::invalid_argument("Invalid arguments");
+//	}
+//
+//	printf("recv_pkt\n");
+//	printf("opool_sz: %zd\n", opool_sz);
+//	for (int i = 0; i < opool_sz; i++) {
+//		printf("%hx", ((uint8_t*)opool)[i]);
+//	}
+//
+//	std::vector<std::vector<size_t>> pool;
+//	do {
+//		pool = thread_pkt_split(opool, opool_sz, TRS_SIG);
+//		if (pool.size() == 0) {
+//			printf("opool sz:%zd\n", opool_sz);
+//			Sleep(1);
+//		}
+//	} while (pool.size() == 0);
+//
+//	printf("Pool size: %zd\n", pool.size());
+//	*ret_sz = pool[0][0] - pool[0][1];
+//
+//	void* ret = calloc(pool[0][0] - pool[0][1], 1);
+//	//if (ret == nullptr) {
+//	//	throw std::bad_alloc();
+//	//}
+//
+//	memcpy(ret, (uint8_t*)opool + pool[0][0], *ret_sz);
+//
+//	void* new_opool = calloc(opool_sz - *ret_sz, 1);
+//	if (new_opool == nullptr) {
+//		free(ret);
+//		throw std::bad_alloc();
+//	}
+//
+//	memcpy(new_opool, (uint8_t*)opool + pool[0][0], opool_sz - *ret_sz);
+//	free(opool);
+//	opool = new_opool;
+//	opool_sz -= *ret_sz;
+//
+//	return ret;
+//}
+
+void* IOPool_esp::recv_pkt(size_t ret_sz) {
+    void* result = malloc(ret_sz);
+    while (opool_sz < ret_sz) {
+        Sleep(10);
+    }
+    void* tmp_opool = malloc(opool_sz);
+    memcpy(tmp_opool, opool, opool_sz);
+    opool = realloc(opool, opool_sz - ret_sz);
+    memcpy(opool, (uint8_t*)tmp_opool + ret_sz, opool_sz - ret_sz);
+    memcpy(result, tmp_opool, ret_sz);
+    free(tmp_opool);
+    return result;
 }

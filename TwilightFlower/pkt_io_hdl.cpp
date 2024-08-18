@@ -28,7 +28,7 @@ std::vector<std::vector<size_t>> thread_pkt_split(void* thread, size_t thread_sz
 
 		int memcmp_result = memcmp(sig, str, 4);
 		if (memcmp_result == 0) {
-			pkt_ps[(int)isStartPoint] = thread_ptr; // somnitel'no no okey
+			pkt_ps[isStartPoint] = thread_ptr; // somnitel'no no okey
 			if (!isStartPoint) {
 				pool.push_back(pkt_ps);
 				pkt_ps = { 0, 0 };
