@@ -10,19 +10,20 @@ std::vector<std::vector<size_t>> thread_pkt_split(void* thread, size_t thread_sz
 	const char* sig = reinterpret_cast<const char*>(&rec_sig);
 	char* str = static_cast<char*>(calloc(4, sizeof(char)));
 
-	std::vector<size_t> pkt_ps = { 0, 0 }; // packet points
+	std::vector<size_t> pkt_ps;
+	pkt_ps.resize(2, 0);
 	bool isStartPoint = true;
 	size_t thread_ptr = 0;
 
 	if (!str || !sig || !thread) {
-		free(str);
+		//free(str);
 		return pool;
 	}
 
 	while (thread_sz - thread_ptr > 0) {
 		char* memcpy_result = reinterpret_cast<char*>(memcpy(str, reinterpret_cast<char*>(thread) + thread_ptr, 4));
 		if (!memcpy_result) {
-			free(str);
+			//free(str);
 			return pool;
 		}
 
@@ -39,7 +40,7 @@ std::vector<std::vector<size_t>> thread_pkt_split(void* thread, size_t thread_sz
 		thread_ptr++;
 	}
 
-	free(str);
+	//free(str);
 	return pool;
 }
 

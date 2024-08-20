@@ -187,7 +187,7 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 
 	//Deallocating KEY request
 	free(key_ut);
-	free(buf_key_req);
+	//free(buf_key_req);
 
 	//Setting KEY packet
 	key_pkt->start_sig = TRS_SIG;
