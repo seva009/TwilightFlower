@@ -5,16 +5,20 @@
 #include <stdio.h>
 #include <stdexcept>
 
+OVERLAPPED overlappedrd, overlappedwr;
+DWORD btr, temp, mask, signal; //btr - bytes to read а не то что ты подумал(а) :)
+bool write_status;
+
 #pragma warning(disable : 26495)
-IOPool_esp::IOPool_esp(CString port) {
-    
+IOPool_esp::IOPool_esp(const wchar_t* port) {
+    overlappedrd.hEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
     hPort = CreateFile(
-        port,
+        CString("\\\\.\\COM6"),
         GENERIC_WRITE | GENERIC_READ,
         0,
         NULL,
         OPEN_EXISTING,
-        0,
+        FILE_FLAG_OVERLAPPED,
         NULL
     );
 
@@ -27,6 +31,7 @@ IOPool_esp::IOPool_esp(CString port) {
     dcbSerialParams.StopBits = ONESTOPBIT; //1 stop
     if (!SetCommState(hPort, &dcbSerialParams))
         return;
+    SetCommMask(hPort, EV_RXCHAR);
     memset(tmp_buf, 0, tmp_buf_sz);
     opool = calloc(1,1);
 	ipool = calloc(1,1);
@@ -35,8 +40,9 @@ IOPool_esp::IOPool_esp(CString port) {
     ipool_sz = 0;
 	opool_sz = 0;
     tmp_buf_sz = 0;
-    read_t = std::thread(&IOPool_esp::inf_read_bytes, this);
-    read_t.detach();
+    /*read_t = std::thread(&IOPool_esp::read_bytes, this);
+    read_t.detach();*/
+    Sleep(300);
 	return;
 }
 
@@ -81,116 +87,153 @@ void IOPool_esp::merge_buf(void** buf, void* adn_buf, size_t* buf_sz, size_t adn
     *buf = new_buf;
 }
 
-void IOPool_esp::write_ipool() {
-    lock_o();
-    if (locked_i)
+void IOPool_esp::read_bytes() {
+    printf("\nRead thread launched\n");
+    COMSTAT comstat; //структура текущего состояния порта, в данной программе используется для определенияколичества принятых в порт байтов
+    DWORD btr, temp, mask, signal; //переменная temp используется в качестве заглушки
+    overlappedrd.hEvent = CreateEvent(NULL, true, true, NULL); //создать сигнальный объект-событие дляасинхронных операций
+    SetCommMask(hPort, EV_RXCHAR); //установить маску на срабатывание по событию приёма байта в порт
+    while (1) //пока поток не будет прерван, выполняем цикл
     {
-        while (locked_i)
+
+        if (!locked_o)
         {
-            Sleep(1);
+            WaitCommEvent(hPort, &mask, &overlappedrd); //ожидать события приёма байта (это и есть перекрываемая операция)
+            signal = WaitForSingleObject(overlappedrd.hEvent, INFINITE); //приостановить поток до прихода байта
+            if (signal == WAIT_OBJECT_0) //если событие прихода байта произошло
+            {
+                if (GetOverlappedResult(hPort, &overlappedrd, &temp, true)) //проверяем, успешно ли завершилась перекрываемая операция WaitCommEvent
+                    if ((mask & EV_RXCHAR) != 0) //если произошло именно событие прихода байта
+                    {
+                        ClearCommError(hPort, &temp, &comstat); //нужно заполнить структуру COMSTAT
+                        btr = comstat.cbInQue; //и получить из неё количество принятых байтов
+                        if (btr) //если действительно есть байты для чтения
+                        {
+                            void* _tmp_buf = realloc(opool, opool_sz + btr);
+                            ReadFile(hPort, (uint8_t*)_tmp_buf + opool_sz, btr, &temp, &overlappedrd); //прочитать байты из порта в буфер программы
+                            memcpy(_tmp_buf, opool, opool_sz);
+                            opool_sz += btr;
+                            opool = _tmp_buf;
+                            for (int i = 0; i < btr; i++) {
+                                printf("%hx, ", ((uint8_t*)opool)[i + opool_sz - btr]);
+                            }   
+                            printf("\n%zd\n", opool_sz);
+                        }
+                    }
+            }
+        }
+        else {
+            printf("\nLocked\n");
         }
     }
-    
-    //merge_buf(&ipool, tmp_buf, &ipool_sz, tmp_buf_sz);
-    if (!WriteFile(hPort, ipool, ipool_sz, NULL, NULL)) printf("Can't write\n");
-	ipool_sz = 0;
-    free(ipool);
-	unlock_o();
-	return;
+    CloseHandle(overlappedrd.hEvent); //перед выходом из потока закрыть объект-событие
 }
 
-void IOPool_esp::read_byte() {
-	if (locked_o)
-	{
-        printf("locked_o\n");
-		while (locked_o)
-		{
-			Sleep(1);
-		}
-	}
-	lock_i();
-    opool = realloc(opool, opool_sz + 1);
-	ReadFile(hPort, (uint8_t*)opool + opool_sz, 1, NULL, NULL);
-	opool_sz += 1;
-    /*if (tmp_buf_sz - 1 == sizeof(tmp_buf) || last_byte_read - time(NULL) >= 1) {
-        printf("tmp_buf_sz %d\n", tmp_buf_sz);
-        merge_buf(&opool, tmp_buf, &opool_sz, sizeof(tmp_buf));
-        opool_sz += tmp_buf_sz;
-        tmp_buf_sz = 0;
-    }*/
-    last_byte_read = time(NULL);
-	unlock_i();  
-    //printf("read_byte end\n");
-	return;
-}
-
-void IOPool_esp::inf_read_bytes() {
-	while (true) {
-		read_byte();
-	}
-}
-
-void IOPool_esp::send_pkt(void* pkt, size_t pkt_sz) {
+void IOPool_esp::write_ipool() {
     lock_o();
-    WriteFile(hPort, pkt, pkt_sz, NULL, NULL);
+    WriteFile(hPortW, ipool, ipool_sz, NULL, NULL);
     unlock_o();
 }
 
-//well i dont want to fix it
-//void* IOPool_esp::recv_pkt(size_t* ret_sz) {
-//	if (ret_sz == nullptr || opool == nullptr) {
-//		throw std::invalid_argument("Invalid arguments");
-//	}
-//
-//	printf("recv_pkt\n");
-//	printf("opool_sz: %zd\n", opool_sz);
-//	for (int i = 0; i < opool_sz; i++) {
-//		printf("%hx", ((uint8_t*)opool)[i]);
-//	}
-//
-//	std::vector<std::vector<size_t>> pool;
-//	do {
-//		pool = thread_pkt_split(opool, opool_sz, TRS_SIG);
-//		if (pool.size() == 0) {
-//			printf("opool sz:%zd\n", opool_sz);
-//			Sleep(1);
-//		}
-//	} while (pool.size() == 0);
-//
-//	printf("Pool size: %zd\n", pool.size());
-//	*ret_sz = pool[0][0] - pool[0][1];
-//
-//	void* ret = calloc(pool[0][0] - pool[0][1], 1);
-//	//if (ret == nullptr) {
-//	//	throw std::bad_alloc();
-//	//}
-//
-//	memcpy(ret, (uint8_t*)opool + pool[0][0], *ret_sz);
-//
-//	void* new_opool = calloc(opool_sz - *ret_sz, 1);
-//	if (new_opool == nullptr) {
-//		free(ret);
-//		throw std::bad_alloc();
-//	}
-//
-//	memcpy(new_opool, (uint8_t*)opool + pool[0][0], opool_sz - *ret_sz);
-//	free(opool);
-//	opool = new_opool;
-//	opool_sz -= *ret_sz;
-//
-//	return ret;
-//}
+void xcut_buf(void** buf, size_t buf_sz, size_t p1, size_t p2, void** cut) {
+	if (p1 >= p2 || p2 > buf_sz) {
+		return;
+	}
 
-void* IOPool_esp::recv_pkt(size_t ret_sz) {
-    void* result = malloc(ret_sz);
-    while (opool_sz < ret_sz) {
-        Sleep(10);
+	*cut = malloc(p2 - p1);
+	void* pre_cut_part = malloc(p1);
+	void* post_cut_part = malloc(buf_sz - p2);
+
+	if (*cut == nullptr || pre_cut_part == nullptr || post_cut_part == nullptr) {
+		printf("Can't allocate memory");
+		free(*cut);
+		free(pre_cut_part);
+		free(post_cut_part);
+		return;
+	}
+
+	memcpy(pre_cut_part, *buf, p1);
+	memcpy(post_cut_part, (uint8_t*)*buf + p2, buf_sz - p2);
+	memcpy(*cut, (uint8_t*)*buf + p1, p2 - p1);
+
+	void* tmp = malloc(p2 - p1);
+	if (tmp == nullptr) {
+		printf("Can't reallocate memory");
+		free(*cut);
+		free(pre_cut_part);
+		free(post_cut_part);
+		free(*buf);
+		*buf = nullptr;
+		return;
+	}
+
+	memcpy(tmp, pre_cut_part, p1);
+	memcpy((uint8_t*)tmp + p1, post_cut_part, p2 - p1);
+	free(*buf);
+	*buf = tmp;
+}
+
+
+#pragma warning(disable : 6031)
+void* IOPool_esp::recv_pkt(size_t* ret_sz) {
+    COMSTAT comstat; //структура текущего состояния порта, в данной программе используется для определенияколичества принятых в порт байтов
+    DWORD btr, temp, mask, signal; //переменная temp используется в качестве заглушки
+    overlappedrd.hEvent = CreateEvent(NULL, true, true, NULL); //создать сигнальный объект-событие дляасинхронных операций
+    SetCommMask(hPort, EV_RXCHAR); //установить маску на срабатывание по событию приёма байта в порт
+    std::vector<std::vector<size_t>> pool;
+    if (!opool) {
+        printf("Error\n");
     }
-    void* tmp_opool = malloc(opool_sz);
-    memcpy(tmp_opool, opool, opool_sz);
-    opool = realloc(opool, opool_sz - ret_sz);
-    memcpy(opool, (uint8_t*)tmp_opool + ret_sz, opool_sz - ret_sz);
-    memcpy(result, tmp_opool, ret_sz);
-    free(tmp_opool);
-    return result;
+    do {
+        for (int i = 0; i < opool_sz; i++) printf("%hx, ", ((uint8_t*)opool)[i]);
+        printf("\n");
+        pool = thread_pkt_split(opool, opool_sz, TRS_SIG);
+        //printf("%zd, ", opool_sz);
+        if (!locked_o)
+        {
+            WaitCommEvent(hPort, &mask, &overlappedrd); //ожидать события приёма байта (это и есть перекрываемая операция)
+            signal = WaitForSingleObject(overlappedrd.hEvent, INFINITE); //приостановить поток до прихода байта
+            if (signal == WAIT_OBJECT_0) //если событие прихода байта произошло
+            {
+                if (GetOverlappedResult(hPort, &overlappedrd, &temp, true)) //проверяем, успешно ли завершилась перекрываемая операция WaitCommEvent
+                    if ((mask & EV_RXCHAR) != 0) //если произошло именно событие прихода байта
+                    {
+                        ClearCommError(hPort, &temp, &comstat); //нужно заполнить структуру COMSTAT
+                        btr = comstat.cbInQue; //и получить из неё количество принятых байтов
+                        if (btr) //если действительно есть байты для чтения
+                        {
+                            void* _tmp_buf = malloc(opool_sz + btr + 1);
+                            if (!_tmp_buf) {
+                                printf("error\n");
+                                return nullptr;
+                            }
+                            memcpy(_tmp_buf, opool, opool_sz);
+                            ReadFile(hPort, (uint8_t*)_tmp_buf + opool_sz, btr, &temp, &overlappedrd); //прочитать байты из порта в буфер программы
+                            memcpy(_tmp_buf, opool, opool_sz);
+                            opool_sz += btr;
+                            opool = _tmp_buf;
+                        }
+                    }
+            }
+        }
+        else {
+            printf("\nLocked\n");
+        }
+    } while (pool.size() < 1);
+    *ret_sz = pool[0][0] - pool[0][1] + 4;
+
+    void* pkt;
+    xcut_buf(&opool, opool_sz, pool[0][1], pool[0][0] + 4, &pkt); //lol it useful
+    return pkt;
+    
+}
+
+void IOPool_esp::send_pkt(void* pkt, size_t pkt_sz) {
+    printf("Writing...\n");
+    DWORD temp, signal;
+    overlappedwr.hEvent = CreateEvent(NULL, true, true, NULL); //создать событие
+    WriteFile(hPort, pkt, pkt_sz, &temp, &overlappedwr); //записать байты в порт (перекрываемая операция!)
+    signal = WaitForSingleObject(overlappedwr.hEvent, INFINITE); //приостановить поток, пока не завершится перекрываемая операция WriteFile
+    if ((signal == WAIT_OBJECT_0) && (GetOverlappedResult(hPort, &overlappedwr, &temp, true))) write_status = true; //если операция завершилась успешно, установить соответствующий флажок
+    else write_status = false;
 }

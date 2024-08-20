@@ -30,6 +30,7 @@ namespace packets {
 		uint8_t  proto_ver = PROTO_VER;//protocol version
 		uint16_t type = HELLO;     //type
 		uint16_t ec_ver = EC_VER;   //EasyCrypt version
+    uint32_t end_sig = TRS_SIG;
 	}) hello;
 
 	typedef packed(struct {

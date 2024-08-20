@@ -21,6 +21,7 @@ namespace packets {
 		uint8_t  proto_ver;//protocol version
 		uint16_t type;     //type
 		uint16_t ec_ver;   //EasyCrypt version
+		uint32_t end_sig;  //signature
 	}) hello;
 
 	typedef packed(struct {

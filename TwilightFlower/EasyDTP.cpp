@@ -7,7 +7,7 @@
 #include "iopool.h"
 
 #define pksf(x) (x >= 10)?2:1
-IOPool_esp iopool("\\\\.\\COM6");
+IOPool_esp iopool(L"\\\\.\\COM6");
 
 bool EasyDTP::SendPacket(void* pkt, size_t pkt_sz) {
 	iopool.send_pkt(pkt, pkt_sz);
@@ -15,8 +15,9 @@ bool EasyDTP::SendPacket(void* pkt, size_t pkt_sz) {
 }
 
 bool EasyDTP::RecvPacket(void* pkt, size_t pkt_sz) {
-	void* tmp_pkt = iopool.recv_pkt(pkt_sz);
-	memcpy(pkt, tmp_pkt, pkt_sz);
+	size_t tmp_sz = pkt_sz;
+	void* tmp_pkt = iopool.recv_pkt(&tmp_sz);
+	memcpy(pkt, tmp_pkt, tmp_sz);
 	return true;
 }
 
@@ -118,8 +119,11 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 	hello_pkt->proto_ver = PROTO_VER;
 	hello_pkt->type = (uint16_t)pkt_types::HELLO;
 	hello_pkt->ec_ver = EC_VER;
+	hello_pkt->end_sig = TRS_SIG;
 
 	printf("\nSending HELLO...\n");
+	for (int i = 0; i < HELLO_PKT_SZ; i++) printf("%hx, ", ((uint8_t*)hello_pkt)[i]);
+	printf("\n");
 	//Sending HELLO packet
 	if (!SendPacket(hello_pkt, HELLO_PKT_SZ)) {
 		printf("Failed to send HELLO...\n");
@@ -136,7 +140,7 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 
 	//Parsing HELLO packet
 	packets::ut_pkt* hello_ut = pkt_parser(buf_hello, HELLO_PKT_SZ);
-
+	for (int i = 0; i < HELLO_PKT_SZ + 4; i++) printf("%02x ", ((uint8_t*)buf_hello)[i]);
 	//Checking HELLO packet
 	if (hello_ut == nullptr) {
 		printf("Failed to parse HELLO...\n");
@@ -152,7 +156,7 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 	//Deallocating HELLO packet
 	free(hello_ut);
 	free(hello_pkt);
-	free(buf_hello);
+	//free(buf_hello); //it's throw error
 
 	/*Step 3 - sending KEY*/
 
@@ -168,7 +172,7 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 
 	//Parsing KEY request
 	packets::ut_pkt* key_ut = pkt_parser(buf_key_req, REQ_PKT_SZ);
-
+	for (int i = 0; i < REQ_PKT_SZ; i++) printf("%02x ", ((uint8_t*)buf_key_req)[i]);
 	//Checking KEY request
 	if (key_ut == nullptr) {
 		printf("Failed to parse KEY request...\n");
@@ -205,7 +209,10 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 	//free(key_pkt);
 
 	uint8_t* resp = (uint8_t*)calloc(RESP_STATUS_PKT_SZ, 1);
-
+	if (!resp) {
+		printf("Failed to allocate memory for KEY response...\n");
+		return false;
+	}
 	//Receiving KEY response
 	if (!RecvPacket(resp, RESP_STATUS_PKT_SZ)) {
 		printf("Failed to receive KEY response...\n");

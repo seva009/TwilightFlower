@@ -16,31 +16,40 @@ uint8_t* buf = (uint8_t*)calloc(512, 1);
 size_t buf_sz = 0;
 
 uint8_t stage = 0;
+uint32_t ll = TRS_SIG; //idk 
 packets::hello hello;
 packets::cts cts;
 packets::req req;
 packets::resp_s resp_s;
 
 void loop() {
-  delay(100);
+  delay(500);
   if (Serial.available() > 0) {
+    digitalWrite(2, HIGH);
 	  switch (stage) {
       case 0:
         goto stage_0;
+        delay(100);
         break;
       case 1:
         goto stage_1;
+        delay(100);
         break;
       case 2:
       end_stage_1:
+      delay(100);
         goto stage_2;
+        delay(100);
         break;
       case 3:
         goto stage_3;
+        delay(100);
         break;
       case 4:
         end_stage_3:
+        delay(100);
         goto stage_4;
+        delay(100);
         break;
     }
   }

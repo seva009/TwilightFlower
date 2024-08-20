@@ -8,6 +8,7 @@
 #include "crc32.h"
 #include "EasyDTP.h"
 #include "pkt_io_hdl.h"
+#include "iopool.h"
 
 const char* hw = "Hello, world!";
 int main()
@@ -129,5 +130,5 @@ int main()
 	uint8_t key[32];
 	EasyDTP dtp(6);
 	dtp.TransferKey(key);
-
+	return 0;
 }
