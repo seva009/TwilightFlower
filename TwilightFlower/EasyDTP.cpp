@@ -15,6 +15,7 @@ bool EasyDTP::SendPacket(void* pkt, size_t pkt_sz) {
 }
 
 bool EasyDTP::RecvPacket(void* pkt, size_t pkt_sz) {
+	
 	size_t tmp_sz = pkt_sz;
 	void* tmp_pkt = iopool.recv_pkt(&tmp_sz);
 	memcpy(pkt, tmp_pkt, tmp_sz);

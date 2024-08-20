@@ -40,6 +40,7 @@ IOPool_esp::IOPool_esp(const wchar_t* port) {
     ipool_sz = 0;
 	opool_sz = 0;
     tmp_buf_sz = 0;
+    Sleep(300);
     /*read_t = std::thread(&IOPool_esp::read_bytes, this);
     read_t.detach();*/
     Sleep(300);
