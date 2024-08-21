@@ -5,6 +5,7 @@
 #include "crc32.h"
 #include <cstdio>
 #include "iopool.h"
+#include "debug.h"
 
 #define pksf(x) (x >= 10)?2:1
 IOPool_esp iopool(L"\\\\.\\COM6");
@@ -32,16 +33,17 @@ EasyDTP::EasyDTP(int port) {
 
 }
 
-EasyDTP::~EasyDTP() {
-	memset(PrimaryKey, 0, 32);
-	packets::command* hlt = (packets::command*)malloc(CMD_PKT_SZ);
-	hlt->start_sig = TRS_SIG;
-	hlt->proto_ver = PROTO_VER;
-	hlt->type = (uint16_t)Commands::HALT;
-	hlt->end_sig = TRS_SIG;
-	SendPacket(hlt, CMD_PKT_SZ);
-	free(hlt);
-}
+//EasyDTP::~EasyDTP() {
+//	//memset(PrimaryKey, 0, 32);
+//	return;
+//	packets::command* hlt = (packets::command*)malloc(CMD_PKT_SZ);
+//	hlt->start_sig = TRS_SIG;
+//	hlt->proto_ver = PROTO_VER;
+//	hlt->type = (uint16_t)Commands::HALT;
+//	hlt->end_sig = TRS_SIG;
+//	SendPacket(hlt, CMD_PKT_SZ);
+//	free(hlt);
+//}
 
 bool EasyDTP::TransferKey(uint8_t key[32]) {
 
@@ -58,10 +60,9 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 	rts->end_sig = TRS_SIG;
 	rts->rts_timeout = 0x51;
 
-	printf("\nRTS: ");
-	for (int i = 0; i < RTS_PKT_SZ; i++) {
-		printf("%02x ", ((uint8_t*)rts)[i]);
-	}
+	DEBUG_L2(printf("\nRTS: "));
+	DEBUG_L2(for (int i = 0; i < RTS_PKT_SZ; i++) printf("%02x ", ((uint8_t*)rts)[i]));
+	
 
 	//Sending RTS
 	printf("\nSending RTS...\n");
@@ -83,11 +84,9 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 	//Parsing CTS
 	packets::ut_pkt* ut = pkt_parser((uint8_t*)cts, CTS_PKT_SZ);
 
-	printf("CTS: ");
-	for (int i = 0; i < CTS_PKT_SZ; i++) {
-		printf("%02x ", ((uint8_t*)cts)[i]);
-	}
-	printf("\n");
+	DEBUG_L2(printf("CTS: "));
+	DEBUG_L2(for (int i = 0; i < CTS_PKT_SZ; i++) printf("%02x ", ((uint8_t*)cts)[i]));
+	DEBUG_L2(printf("\n"));
 
 
 	//Checking CTS
@@ -173,7 +172,7 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 
 	//Parsing KEY request
 	packets::ut_pkt* key_ut = pkt_parser(buf_key_req, REQ_PKT_SZ);
-	for (int i = 0; i < REQ_PKT_SZ; i++) printf("%02x ", ((uint8_t*)buf_key_req)[i]);
+	DEBUG_L2(for (int i = 0; i < REQ_PKT_SZ; i++) printf("%02x ", ((uint8_t*)buf_key_req)[i]));
 	//Checking KEY request
 	if (key_ut == nullptr) {
 		printf("Failed to parse KEY request...\n");
@@ -246,4 +245,5 @@ bool EasyDTP::TransferKey(uint8_t key[32]) {
 	//free(resp_ut);
 	//free(resp); 
 	return true;
+
 }

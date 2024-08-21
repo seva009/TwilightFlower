@@ -4,6 +4,7 @@
 #include "io.h"
 #include <stdio.h>
 #include <stdexcept>
+#include "debug.h"
 
 OVERLAPPED overlappedrd, overlappedwr;
 DWORD btr, temp, mask, signal; //btr - bytes to read а не то что ты подумал(а) :)
@@ -40,7 +41,6 @@ IOPool_esp::IOPool_esp(const wchar_t* port) {
     ipool_sz = 0;
 	opool_sz = 0;
     tmp_buf_sz = 0;
-    Sleep(300);
     /*read_t = std::thread(&IOPool_esp::read_bytes, this);
     read_t.detach();*/
     Sleep(300);
@@ -167,14 +167,13 @@ void xcut_buf(void** buf, size_t buf_sz, size_t p1, size_t p2, void** cut) {
 	if (p1 >= p2 || p2 > buf_sz) {
 		return;
 	}
-
-	*cut = malloc(p2 - p1);
+    void* tmp_cut = malloc(p2 - p1);
 	void* pre_cut_part = malloc(p1);
 	void* post_cut_part = malloc(buf_sz - p2);
 
-	if (*cut == nullptr || pre_cut_part == nullptr || post_cut_part == nullptr) {
+	if (tmp_cut == nullptr || pre_cut_part == nullptr || post_cut_part == nullptr) {
 		printf("Can't allocate memory");
-		free(*cut);
+		free(tmp_cut);
 		free(pre_cut_part);
 		free(post_cut_part);
 		return;
@@ -182,12 +181,12 @@ void xcut_buf(void** buf, size_t buf_sz, size_t p1, size_t p2, void** cut) {
 
 	memcpy(pre_cut_part, *buf, p1);
 	memcpy(post_cut_part, (uint8_t*)*buf + p2, buf_sz - p2);
-	memcpy(*cut, (uint8_t*)*buf + p1, p2 - p1);
+	memcpy(tmp_cut, (uint8_t*)*buf + p1, p2 - p1);
 
 	void* tmp = malloc(p2 - p1);
 	if (tmp == nullptr) {
 		printf("Can't reallocate memory");
-		free(*cut);
+		free(tmp_cut);
 		free(pre_cut_part);
 		free(post_cut_part);
 		free(*buf);
@@ -199,6 +198,7 @@ void xcut_buf(void** buf, size_t buf_sz, size_t p1, size_t p2, void** cut) {
 	memcpy((uint8_t*)tmp + p1, post_cut_part, p2 - p1);
 	free(*buf);
 	*buf = tmp;
+    *cut = tmp_cut;
 }
 
 
@@ -211,8 +211,8 @@ void* IOPool_esp::recv_pkt(size_t* ret_sz) {
     size_t p1 = 0, p2 = 0;
 
     do {
-        for (int i = 0; i < opool_sz; i++) printf("%hx, ", ((uint8_t*)opool)[i]);
-        printf("\n");
+        DEBUG_L2(for (int i = 0; i < opool_sz; i++) printf("%hx, ", ((uint8_t*)opool)[i]));
+        DEBUG_L2(printf("\n"));
         splt_thread(opool, opool_sz, &p1, &p2, TRS_SIG);
             WaitCommEvent(hPort, &mask, &overlappedrd); //ожидать события приёма байта (это и есть перекрываемая операция)
             signal = WaitForSingleObject(overlappedrd.hEvent, INFINITE); //приостановить поток до прихода байта

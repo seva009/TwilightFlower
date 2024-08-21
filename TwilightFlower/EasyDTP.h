@@ -19,5 +19,5 @@ public:
 	bool TransferKey(uint8_t key[32]);
 	bool SendCommand(Commands command);
 	bool GetPrimaryKey();
-	~EasyDTP();
+	//~EasyDTP();
 };
